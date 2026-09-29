@@ -78,15 +78,16 @@ func run(interval time.Duration, jsonOut, verbose bool) error {
 
 // sampleSummary is the condensed JSON output for --json (without -v).
 type sampleSummary struct {
-	Timestamp           time.Time `json:"timestamp"`
-	Architecture        string    `json:"architecture"`
-	NumCores            int64     `json:"num_cores"`
-	ANEPowerW           float64   `json:"ane_power_watts"`
-	ANEUtilizationPct   float64   `json:"ane_utilization_pct"`
-	ANEClusterActivePct float64   `json:"ane_cluster_active_pct"`
-	GPUPowerW           float64   `json:"gpu_power_watts,omitempty"`
-	GPUActivePct        float64   `json:"gpu_active_pct,omitempty"`
-	GPUTempC            float64   `json:"gpu_temp_c,omitempty"`
+	Timestamp            time.Time `json:"timestamp"`
+	Architecture         string    `json:"architecture"`
+	NumCores             int64     `json:"num_cores"`
+	ANEPowerW            float64   `json:"ane_power_watts"`
+	ANEUtilizationPct    float64   `json:"ane_utilization_pct"`
+	ANEUtilizationSource string    `json:"ane_utilization_source"`
+	ANEClusterActivePct  float64   `json:"ane_cluster_active_pct"`
+	GPUPowerW            float64   `json:"gpu_power_watts,omitempty"`
+	GPUActivePct         float64   `json:"gpu_active_pct,omitempty"`
+	GPUTempC             float64   `json:"gpu_temp_c,omitempty"`
 }
 
 func runOnce(sampler *aneperf.Sampler, interval time.Duration, verbose bool) error {
@@ -100,15 +101,16 @@ func runOnce(sampler *aneperf.Sampler, interval time.Duration, verbose bool) err
 		return enc.Encode(sample)
 	}
 	return enc.Encode(sampleSummary{
-		Timestamp:           sample.Timestamp,
-		Architecture:        sample.Device.Architecture,
-		NumCores:            sample.Device.NumCores,
-		ANEPowerW:           sample.ANEPowerW,
-		ANEUtilizationPct:   sample.ANEUtilizationPct,
-		ANEClusterActivePct: sample.ANEClusterActivePct,
-		GPUPowerW:           sample.GPUPowerW,
-		GPUActivePct:        sample.GPUActivePct,
-		GPUTempC:            sample.GPUTempC,
+		Timestamp:            sample.Timestamp,
+		Architecture:         sample.Device.Architecture,
+		NumCores:             sample.Device.NumCores,
+		ANEPowerW:            sample.ANEPowerW,
+		ANEUtilizationPct:    sample.ANEUtilizationPct,
+		ANEUtilizationSource: sample.ANEUtilizationSource,
+		ANEClusterActivePct:  sample.ANEClusterActivePct,
+		GPUPowerW:            sample.GPUPowerW,
+		GPUActivePct:         sample.GPUActivePct,
+		GPUTempC:             sample.GPUTempC,
 	})
 }
 
@@ -215,7 +217,17 @@ func printLive(d aneperf.Delta, interval time.Duration) {
 	}
 
 	// Active percentage — prefer Fast-Die CE histogram if available.
-	fmt.Printf("  ANE Active: %s\n", activeBar(stats.ActivePct, 30))
+	activeLabel := "ANE Active"
+	if stats.ActiveSource == "compute" {
+		activeLabel = "ANE Compute"
+	} else if stats.ActiveSource == "voltage" {
+		activeLabel = "ANE Voltage"
+	}
+	if stats.ActiveSource == "none" {
+		fmt.Printf("  %s: unavailable\n", activeLabel)
+	} else {
+		fmt.Printf("  %s: %s\n", activeLabel, activeBar(stats.ActivePct, 30))
+	}
 	if hasGPUInfo(d, cat.GPUStats) {
 		fmt.Printf("  GPU Active: %s\n", activeBar(computeStateActivePct(gpuStates, "OFF", "IDLE", "DOWN"), 30))
 	}

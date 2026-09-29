@@ -7,6 +7,7 @@ import "strings"
 // DeltaStats contains derived metrics computed from a Delta.
 type DeltaStats struct {
 	ActivePct        float64 // weighted CE utilization or voltage fallback
+	ActiveSource     string  // "compute", "voltage", or "none"
 	PeakCEBucket     string  // CE bucket with highest residency ("0%", "45%", etc.)
 	PeakCEPct        float64 // residency % in that peak bucket
 	TotalInterrupts  int64
@@ -25,8 +26,13 @@ func ComputeStats(d Delta) DeltaStats {
 	// Active percentage — prefer Fast-Die CE histogram, fall back to voltage.
 	var hasComputeSamples bool
 	s.ActivePct, hasComputeSamples = computeActivePct(cat.ComputeEn)
-	if !hasComputeSamples {
-		s.ActivePct = computeVoltageActivePct(cat.Voltage)
+	if hasComputeSamples {
+		s.ActiveSource = "compute"
+	} else if voltagePct, hasVoltageSamples := computeVoltageActivePct(cat.Voltage); hasVoltageSamples {
+		s.ActivePct = voltagePct
+		s.ActiveSource = "voltage"
+	} else {
+		s.ActiveSource = "none"
 	}
 
 	// Peak CE bucket.
@@ -93,9 +99,10 @@ func computeActivePct(channels []Channel) (float64, bool) {
 }
 
 // computeVoltageActivePct averages non-VMIN residency across ANE voltage channels.
-func computeVoltageActivePct(channels []Channel) float64 {
+func computeVoltageActivePct(channels []Channel) (float64, bool) {
 	var activeSum float64
 	var channelCount int
+	var hasSamples bool
 	for _, ch := range channels {
 		if len(ch.States) == 0 {
 			continue
@@ -112,12 +119,13 @@ func computeVoltageActivePct(channels []Channel) float64 {
 		}
 		if hasVMIN && total > 0 {
 			activeSum += float64(total-vminRes) / float64(total) * 100
+			hasSamples = true
 		}
 	}
-	if channelCount == 0 {
-		return 0
+	if !hasSamples {
+		return 0, false
 	}
-	return activeSum / float64(channelCount)
+	return activeSum / float64(channelCount), true
 }
 
 // peakCEBucket combines the CE histograms of every compute cluster.
