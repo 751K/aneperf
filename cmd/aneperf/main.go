@@ -268,7 +268,7 @@ func printLive(d aneperf.Delta, interval time.Duration) {
 	fmt.Println()
 
 	// Compute utilization histogram.
-	printComputeUtilization(cat.ComputeEn, stats)
+	printComputeUtilization(cat.ComputeEn)
 	printGPUStats(gpuStates)
 
 	// Voltage states.
@@ -406,7 +406,7 @@ func sparkline(data []float64) string {
 }
 
 // printComputeUtilization renders the Fast-Die CE histogram as a compact bar.
-func printComputeUtilization(channels []aneperf.Channel, stats aneperf.DeltaStats) {
+func printComputeUtilization(channels []aneperf.Channel) {
 	for _, ch := range channels {
 		if len(ch.States) == 0 {
 			continue
@@ -419,10 +419,15 @@ func printComputeUtilization(channels []aneperf.Channel, stats aneperf.DeltaStat
 			continue
 		}
 
-		peakInfo := ""
-		if stats.PeakCEBucket != "" {
-			peakInfo = fmt.Sprintf("  peak:%s  avg:%.1f%%", stats.PeakCEBucket, stats.ActivePct)
+		peakName := ""
+		var peakResidency int64
+		for _, s := range ch.States {
+			if s.Residency > peakResidency {
+				peakResidency = s.Residency
+				peakName = strings.TrimSpace(s.Name)
+			}
 		}
+		peakInfo := fmt.Sprintf("  peak:%s  avg:%.1f%%", peakName, computeActivePctFromCE([]aneperf.Channel{ch}))
 		fmt.Printf("%s╸ Compute Utilization%s %s(%s)%s%s\n", ansiBold, ansiReset, ansiDim, ch.Channel, peakInfo, ansiReset)
 
 		// Show histogram of percentage buckets.

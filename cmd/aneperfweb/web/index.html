@@ -202,8 +202,10 @@ function classifyChannels(channels) {
 }
 
 function computeActivePctFromCE(channels) {
+  let clusterSum = 0, clusterCount = 0, hasSamples = false;
   for (const ch of channels) {
     if (!ch.states || ch.states.length === 0) continue;
+    clusterCount++;
     let totalRes = 0, weightedSum = 0;
     for (const s of ch.states) {
       totalRes += s.residency_ns;
@@ -211,26 +213,29 @@ function computeActivePctFromCE(channels) {
       const pct = parseFloat(name) || 0;
       weightedSum += pct * s.residency_ns;
     }
-    if (totalRes > 0) return weightedSum / totalRes;
+    if (totalRes > 0) {
+      clusterSum += weightedSum / totalRes;
+      hasSamples = true;
+    }
   }
-  return 0;
+  return hasSamples ? clusterSum / clusterCount : null;
 }
 
 function computeActivePctFromVoltage(channels) {
-  let maxActive = 0;
+  let activeSum = 0, channelCount = 0;
   for (const ch of channels) {
     if (!ch.states || ch.states.length === 0) continue;
+    channelCount++;
     let total = 0, vminRes = 0, hasVMIN = false;
     for (const s of ch.states) {
       total += s.residency_ns;
       if (s.name.trim() === 'VMIN') { vminRes = s.residency_ns; hasVMIN = true; }
     }
     if (hasVMIN && total > 0) {
-      const active = (total - vminRes) / total * 100;
-      if (active > maxActive) maxActive = active;
+      activeSum += (total - vminRes) / total * 100;
     }
   }
-  return maxActive;
+  return channelCount > 0 ? activeSum / channelCount : 0;
 }
 
 function computeGPUActivePct(channels) {
@@ -455,7 +460,7 @@ function App() {
   const durationMs = delta.duration ? delta.duration / 1e6 : 1000;
 
   let activePct = computeActivePctFromCE(cat.computeEn);
-  if (activePct === 0) activePct = computeActivePctFromVoltage(cat.voltage);
+  if (activePct === null) activePct = computeActivePctFromVoltage(cat.voltage);
   const gpuActivePct = delta.gpu_active_pct || computeGPUActivePct(cat.gpuStats);
   const clusterSummary = summarizeClusterPower(cat.clusterPower);
   const aneEnergy = summarizeEnergyRows(cat.energy, durationMs, isANEEnergyChannel);
